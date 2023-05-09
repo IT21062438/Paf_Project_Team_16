@@ -10,11 +10,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import com.group16.api.Entities.Post;
+import com.group16.api.Entities.Like;
+import com.group16.api.Entities.LikeList;
 import com.group16.api.Entities.User;
-import com.group16.api.Service.PostService;
+import com.group16.api.Service.LikeService;
 import com.group16.api.Service.UserService;
 
 import net.minidev.json.JSONObject;
@@ -28,7 +30,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 @RequestMapping("/like")
 public class LikeController {
     @Autowired
-    private PostService postService;
+    private LikeService likeService;
 
     @Autowired
     private UserService userService;
@@ -37,44 +39,28 @@ public class LikeController {
     private User user;
 
     @PostMapping("/add")
-    public ResponseEntity<JSONObject> add(@RequestBody Post req, @AuthenticationPrincipal OAuth2User principal) {
+    public ResponseEntity<JSONObject> add(@RequestBody Like req, @AuthenticationPrincipal OAuth2User principal) {
         try {
             this.attributes = principal.getAttributes();
             String email = this.attributes.get("email").toString();
             this.user = userService.fetchByEmail(email);
             
-            Post post = req;
+            Like like = req;
             LocalDateTime localDateTime = LocalDateTime.now();
 
-            post.setUserId(this.user.getUserId());
-            post.setCreatedDate(localDateTime.toString());
+            Like previousLike = likeService.fetchbyUserAndPost(this.user.getUserId(), req.getPostId());
+            if (previousLike == null){
+                like.setUserId(this.user.getUserId());
+                like.setCreatedDate(localDateTime.toString());
 
-            postService.savePost(post);
-            
-            JSONObject res = new JSONObject();
-            res.put("content", "");
-            res.put("isSuccessful", true);
-            res.put("errorMsg", "");
-            return ResponseEntity.status(HttpStatus.OK).body(res);
+                likeService.saveLike(like);
+            }
+            else {
+                previousLike.setReaction(req.getReaction());
+                previousLike.setModifiedDate(localDateTime.toString());
 
-        } catch (Exception e) {
-            JSONObject res = new JSONObject();
-            res.put("content", "");
-            res.put("isSuccessful", false);
-            res.put("errorMsg", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(res);
-        }
-    }
-
-    @PostMapping("/edit")
-    public ResponseEntity<JSONObject> edit(@RequestBody Post req) {
-        try {
-            Post post = req;
-            LocalDateTime localDateTime = LocalDateTime.now();
-
-            post.setModifiedDate(localDateTime.toString());
-
-            postService.savePost(post);
+                likeService.saveLike(previousLike);
+            }
             
             JSONObject res = new JSONObject();
             res.put("content", "");
@@ -92,16 +78,23 @@ public class LikeController {
     }
 
     @GetMapping("/listSimple")
-    public ResponseEntity<JSONObject> getAllPosts(@AuthenticationPrincipal OAuth2User principal) {
+    public ResponseEntity<JSONObject> getLikesCount(@RequestParam int postId, @AuthenticationPrincipal OAuth2User principal) {
         try{
             this.attributes = principal.getAttributes();
             String email = this.attributes.get("email").toString();
             this.user = userService.fetchByEmail(email);
 
-            List<Post> data = postService.getAllPostsById(this.user.getUserId());
+            int totCount = likeService.getAllLikeCountByPostId(postId);
+            int likeCount = likeService.getLikeLikeCountByPostId(postId);
+            int heartCount = likeService.getHeartLikeCountByPostId(postId);
+
+            JSONObject counts = new JSONObject();
+            counts.put("totalCount", totCount);
+            counts.put("likeCount", likeCount);
+            counts.put("heartCount", heartCount);
 
             JSONObject res = new JSONObject();
-            res.put("content", data);
+            res.put("content", counts);
             res.put("isSuccessful", true);
             res.put("errorMsg", "");
             return ResponseEntity.status(HttpStatus.OK).body(res);
@@ -115,14 +108,17 @@ public class LikeController {
         }
     }
 
-    @GetMapping("/delete")
-    public ResponseEntity<JSONObject> deletePostById(int postIdReq) {
+    @GetMapping("/fetchByPostID")
+    public ResponseEntity<JSONObject> getAllLikes(@RequestParam int postId, @AuthenticationPrincipal OAuth2User principal) {
         try{
-            Integer postId = Integer.valueOf(postIdReq);
-            postService.deletePost(postId);
+            this.attributes = principal.getAttributes();
+            String email = this.attributes.get("email").toString();
+            this.user = userService.fetchByEmail(email);
+
+            List<LikeList> data = likeService.getAllLikeByPostId(postId);
 
             JSONObject res = new JSONObject();
-            res.put("content", postId);
+            res.put("content", data);
             res.put("isSuccessful", true);
             res.put("errorMsg", "");
             return ResponseEntity.status(HttpStatus.OK).body(res);
